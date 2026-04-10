@@ -158,6 +158,8 @@
     function startAudit() {
       auditorName = document.getElementById("auditor").value.trim();
       if (!auditorName) { alert("Please enter your name."); return; }
+      // ✅ Warm up Apps Script silently while auditor is reading the screen
+      fetch(APPS_SCRIPT_URL + "?action=warmup", { method: "GET" }).catch(() => {});
 
       document.getElementById("login").classList.add("hidden");
       document.getElementById("scannerUI").classList.remove("hidden");
