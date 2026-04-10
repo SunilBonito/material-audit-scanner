@@ -34,11 +34,77 @@
       padding: 16px; margin-bottom: 12px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.1);
     }
+
+    /* ── Discontinued popup overlay ── */
+    #discontinuedOverlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
+      z-index: 999;
+      justify-content: center;
+      align-items: center;
+    }
+    #discontinuedOverlay.show {
+      display: flex;
+    }
+    #discontinuedBox {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 320px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    #discontinuedBox h3 {
+      color: #c62828;
+      margin: 0 0 12px 0;
+      font-size: 20px;
+    }
+    #discontinuedBox p {
+      color: #333;
+      font-size: 15px;
+      margin: 0 0 20px 0;
+      line-height: 1.5;
+    }
+    #discontinuedBox .erp-tag {
+      background: #fce4e4;
+      color: #c62828;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: bold;
+      display: inline-block;
+      margin-bottom: 16px;
+    }
+    #btnDismiss {
+      background: #c62828;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      width: 100%;
+    }
   </style>
 </head>
 <body>
 
   <h2>📦 Material Audit Scanner</h2>
+
+  <!-- ── Discontinued Popup ── -->
+  <div id="discontinuedOverlay">
+    <div id="discontinuedBox">
+      <h3>⚠️ Discontinued!</h3>
+      <div class="erp-tag" id="popupERP"></div>
+      <p>This sample has been <b>discontinued by the vendor</b> but is still present in the Material Library.<br><br>
+      🗑️ Please <b>remove it</b> from the library.</p>
+      <button id="btnDismiss">Got it — Will Remove</button>
+    </div>
+  </div>
 
   <!-- LOGIN -->
   <div id="login" class="card">
@@ -78,6 +144,7 @@
       document.getElementById("btnStartAudit").addEventListener("click", startAudit);
       document.getElementById("startCamBtn").addEventListener("click", startCamera);
       document.getElementById("stopCamBtn").addEventListener("click", stopCamera);
+      document.getElementById("btnDismiss").addEventListener("click", dismissPopup);
     });
 
     function startAudit() {
@@ -132,9 +199,7 @@
       delay = true;
       lastScanned = decodedText;
 
-      // ✅ Grab comment immediately before anything else
       let comments = document.getElementById("comments").value.trim();
-
       setStatus("⏳ Logging: " + decodedText, "blue");
 
       const url = APPS_SCRIPT_URL
@@ -142,20 +207,46 @@
         + "&auditor="  + encodeURIComponent(auditorName)
         + "&comments=" + encodeURIComponent(comments);
 
-      fetch(url, { method: "GET", mode: "no-cors" })
-        .then(() => {
-          setStatus(
-            "✅ Scanned: " + decodedText + (comments ? "  💬 " + comments : ""),
-            "green"
-          );
-          beep();
-          document.getElementById("comments").value = ""; // clear after scan
+      // ── Because mode: no-cors we cannot read the response body ──
+      // ── So we use a second fetch with mode: cors to get the result ──
+      fetch(url, { method: "GET" })
+        .then(res => res.text())
+        .then(response => {
+          response = response.trim();
+
+          if (response === "DISCONTINUED") {
+            // ✅ Show discontinued popup
+            document.getElementById("popupERP").innerText = decodedText;
+            document.getElementById("discontinuedOverlay").classList.add("show");
+            setStatus("⚠️ Discontinued item scanned!", "red");
+            beep();
+
+          } else if (response === "DUPLICATE") {
+            setStatus("⚠️ Already scanned: " + decodedText, "orange");
+
+          } else if (response === "ERP_NOT_FOUND") {
+            setStatus("❌ ERP not found in Master: " + decodedText, "red");
+
+          } else {
+            // SUCCESS
+            setStatus("✅ Scanned: " + decodedText + (comments ? "  💬 " + comments : ""), "green");
+            beep();
+            document.getElementById("comments").value = "";
+          }
+
           setTimeout(() => { delay = false; lastScanned = ""; }, 1500);
         })
         .catch(err => {
           setStatus("❌ Network error: " + err, "red");
           delay = false;
         });
+    }
+
+    function dismissPopup() {
+      document.getElementById("discontinuedOverlay").classList.remove("show");
+      delay = false;
+      lastScanned = "";
+      setStatus("📷 Camera active — point at QR/barcode", "green");
     }
 
     function setStatus(msg, color) {
