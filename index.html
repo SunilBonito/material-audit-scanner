@@ -38,7 +38,7 @@
 </head>
 <body>
 
-  <h2>Material Audit Scanner</h2>
+  <h2>📦 Material Audit Scanner</h2>
 
   <!-- LOGIN -->
   <div id="login" class="card">
@@ -49,14 +49,13 @@
 
   <!-- SCANNER UI -->
   <div id="scannerUI" class="hidden">
-
     <div class="card">
       <h3 id="welcome" style="margin:0 0 8px 0;"></h3>
       <div id="status">Ready to scan...</div>
     </div>
 
     <div class="card">
-      <span class="label"><b>Comment (optional):</b></span>
+      <span class="label"><b>Comment (optional — type BEFORE scanning):</b></span>
       <input type="text" id="comments" placeholder="Add a comment for this item...">
     </div>
 
@@ -64,7 +63,6 @@
     <button id="stopCamBtn" class="red hidden">⛔ Stop Camera</button>
 
     <div id="reader"></div>
-
   </div>
 
   <script>
@@ -91,15 +89,13 @@
       document.getElementById("welcome").innerText = "Auditor: " + auditorName;
       setStatus("⏳ Setting up audit...", "blue");
 
-      // Mark all unscanned items as Missing immediately
-      const url = APPS_SCRIPT_URL + "?action=markAllMissing&auditor=" + encodeURIComponent(auditorName);
-      fetch(url, { method: "GET", mode: "no-cors" })
-        .then(() => {
-          setStatus("✅ Audit started — all items set to Missing. Scan to mark Available.", "green");
-        })
-        .catch(() => {
-          setStatus("⚠️ Could not set Missing status. Check connection.", "orange");
-        });
+      fetch(APPS_SCRIPT_URL + "?action=markAllMissing&auditor=" + encodeURIComponent(auditorName), {
+        method: "GET", mode: "no-cors"
+      }).then(() => {
+        setStatus("✅ Audit started — scan to mark items Available", "green");
+      }).catch(() => {
+        setStatus("⚠️ Could not set Missing status. Check connection.", "orange");
+      });
     }
 
     function startCamera() {
@@ -136,6 +132,7 @@
       delay = true;
       lastScanned = decodedText;
 
+      // ✅ Grab comment immediately before anything else
       let comments = document.getElementById("comments").value.trim();
 
       setStatus("⏳ Logging: " + decodedText, "blue");
@@ -147,9 +144,12 @@
 
       fetch(url, { method: "GET", mode: "no-cors" })
         .then(() => {
-          setStatus("✅ Scanned: " + decodedText + (comments ? " 💬 " + comments : ""), "green");
+          setStatus(
+            "✅ Scanned: " + decodedText + (comments ? "  💬 " + comments : ""),
+            "green"
+          );
           beep();
-          document.getElementById("comments").value = ""; // clear comment after scan
+          document.getElementById("comments").value = ""; // clear after scan
           setTimeout(() => { delay = false; lastScanned = ""; }, 1500);
         })
         .catch(err => {
