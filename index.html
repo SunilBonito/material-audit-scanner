@@ -13,8 +13,10 @@
       border: none; cursor: pointer; background: #1a73e8; color: white;
       -webkit-appearance: none; width: 100%;
     }
-    button.green { background: #2e7d32; }
-    button.red   { background: #c62828; }
+    button.green  { background: #2e7d32; }
+    button.red    { background: #c62828; }
+    button.orange { background: #e8710a; }
+    button.grey   { background: #757575; }
     input[type="text"] {
       width: 93%; padding: 12px; font-size: 16px;
       border-radius: 8px; border: 1px solid #ccc; margin: 6px 0;
@@ -35,8 +37,8 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.1);
     }
 
-    /* ── Discontinued popup overlay ── */
-    #discontinuedOverlay {
+    /* ── Popup overlay (shared) ── */
+    .overlay {
       display: none;
       position: fixed;
       top: 0; left: 0;
@@ -46,10 +48,8 @@
       justify-content: center;
       align-items: center;
     }
-    #discontinuedOverlay.show {
-      display: flex;
-    }
-    #discontinuedBox {
+    .overlay.show { display: flex; }
+    .popup-box {
       background: white;
       border-radius: 16px;
       padding: 24px;
@@ -58,36 +58,13 @@
       text-align: center;
       box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
-    #discontinuedBox h3 {
-      color: #c62828;
-      margin: 0 0 12px 0;
-      font-size: 20px;
-    }
-    #discontinuedBox p {
-      color: #333;
-      font-size: 15px;
-      margin: 0 0 20px 0;
-      line-height: 1.5;
-    }
-    #discontinuedBox .erp-tag {
-      background: #fce4e4;
-      color: #c62828;
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-size: 13px;
-      font-weight: bold;
-      display: inline-block;
-      margin-bottom: 16px;
-    }
-    #btnDismiss {
-      background: #c62828;
-      color: white;
-      border: none;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-      width: 100%;
+    .popup-box h3 { margin: 0 0 12px 0; font-size: 20px; }
+    .popup-box p  { color: #333; font-size: 15px; margin: 0 0 20px 0; line-height: 1.5; }
+    .erp-tag {
+      background: #fce4e4; color: #c62828;
+      padding: 6px 12px; border-radius: 20px;
+      font-size: 13px; font-weight: bold;
+      display: inline-block; margin-bottom: 16px;
     }
   </style>
 </head>
@@ -95,14 +72,38 @@
 
   <h2>📦 Material Audit Scanner</h2>
 
-  <!-- ── Discontinued Popup ── -->
-  <div id="discontinuedOverlay">
-    <div id="discontinuedBox">
-      <h3>⚠️ Discontinued!</h3>
+  <!-- ── 1. Discontinued Popup ── -->
+  <div id="discontinuedOverlay" class="overlay">
+    <div class="popup-box">
+      <h3 style="color:#c62828;">⚠️ Discontinued!</h3>
       <div class="erp-tag" id="popupERP"></div>
       <p>This sample has been <b>discontinued by the vendor</b> but is still present in the Material Library.<br><br>
       🗑️ Please <b>remove it</b> from the library.</p>
-      <button id="btnDismiss">Got it — Will Remove</button>
+      <button id="btnDismiss" class="red">Got it — Will Remove</button>
+    </div>
+  </div>
+
+  <!-- ── 2. New Audit Reset Popup ── -->
+  <div id="resetOverlay" class="overlay">
+    <div class="popup-box">
+      <h3 style="color:#e8710a;">🔄 Start Fresh Audit?</h3>
+      <p>Previous audit data exists in the Master sheet.<br><br>
+      Do you want to <b>clear all previous statuses</b> and start a new audit?<br><br>
+      <small style="color:#888;">⚠️ Discontinued items will NOT be cleared.</small></p>
+      <button id="btnConfirmReset" class="orange">Yes — Clear & Start Fresh</button><br>
+      <button id="btnSkipReset" class="grey" style="margin-top:8px;">No — Continue Previous Audit</button>
+    </div>
+  </div>
+
+  <!-- ── 3. Finish Audit Popup ── -->
+  <div id="finishOverlay" class="overlay">
+    <div class="popup-box">
+      <h3 style="color:#1a73e8;">🏁 Finish Audit</h3>
+      <p>Enter <b>Manager Name</b> to finalise the audit.<br>All unscanned items will be marked <b>Missing</b>.</p>
+      <input type="text" id="managerName" placeholder="Manager name">
+      <button id="btnConfirmFinish" class="green" style="margin-top:8px;">✅ Confirm &amp; Finish</button><br>
+      <button id="btnCancelFinish" class="grey" style="margin-top:8px;">Cancel</button>
+      <p id="managerError" style="color:red; display:none; margin-top:8px;">❌ Name not recognised. Please check and try again.</p>
     </div>
   </div>
 
@@ -127,6 +128,7 @@
 
     <button id="startCamBtn" class="green">📷 Start Camera</button>
     <button id="stopCamBtn" class="red hidden">⛔ Stop Camera</button>
+    <button id="btnFinishAudit" class="orange" style="margin-top:16px;">🏁 Finish Audit</button>
 
     <div id="reader"></div>
   </div>
@@ -144,9 +146,15 @@
       document.getElementById("btnStartAudit").addEventListener("click", startAudit);
       document.getElementById("startCamBtn").addEventListener("click", startCamera);
       document.getElementById("stopCamBtn").addEventListener("click", stopCamera);
-      document.getElementById("btnDismiss").addEventListener("click", dismissPopup);
+      document.getElementById("btnDismiss").addEventListener("click", dismissDiscontinued);
+      document.getElementById("btnConfirmReset").addEventListener("click", confirmReset);
+      document.getElementById("btnSkipReset").addEventListener("click", skipReset);
+      document.getElementById("btnFinishAudit").addEventListener("click", showFinishPopup);
+      document.getElementById("btnConfirmFinish").addEventListener("click", confirmFinish);
+      document.getElementById("btnCancelFinish").addEventListener("click", cancelFinish);
     });
 
+    // ── Start Audit ───────────────────────────────────────────────────────────
     function startAudit() {
       auditorName = document.getElementById("auditor").value.trim();
       if (!auditorName) { alert("Please enter your name."); return; }
@@ -154,17 +162,43 @@
       document.getElementById("login").classList.add("hidden");
       document.getElementById("scannerUI").classList.remove("hidden");
       document.getElementById("welcome").innerText = "Auditor: " + auditorName;
-      setStatus("⏳ Setting up audit...", "blue");
 
-      fetch(APPS_SCRIPT_URL + "?action=markAllMissing&auditor=" + encodeURIComponent(auditorName), {
-        method: "GET", mode: "no-cors"
-      }).then(() => {
-        setStatus("✅ Audit started — scan to mark items Available", "green");
-      }).catch(() => {
-        setStatus("⚠️ Could not set Missing status. Check connection.", "orange");
-      });
+      // Check if previous audit data exists — show reset popup if yes
+      setStatus("⏳ Checking previous audit...", "blue");
+      fetch(APPS_SCRIPT_URL + "?action=checkPreviousAudit", { method: "GET" })
+        .then(res => res.text())
+        .then(response => {
+          if (response.trim() === "HAS_DATA") {
+            // Show reset popup
+            document.getElementById("resetOverlay").classList.add("show");
+          } else {
+            // No previous data — just start
+            setStatus("✅ Audit started — scan to mark items Available", "green");
+          }
+        })
+        .catch(() => {
+          setStatus("✅ Audit started — scan to mark items Available", "green");
+        });
     }
 
+    // ── Reset popup responses ─────────────────────────────────────────────────
+    function confirmReset() {
+      document.getElementById("resetOverlay").classList.remove("show");
+      setStatus("⏳ Clearing previous audit data...", "blue");
+      fetch(APPS_SCRIPT_URL + "?action=resetAudit", { method: "GET" })
+        .then(() => {
+          setStatus("✅ Fresh audit started — scan to mark items Available", "green");
+        }).catch(() => {
+          setStatus("⚠️ Could not reset. Check connection.", "orange");
+        });
+    }
+
+    function skipReset() {
+      document.getElementById("resetOverlay").classList.remove("show");
+      setStatus("✅ Continuing previous audit — scan to mark items Available", "green");
+    }
+
+    // ── Camera ────────────────────────────────────────────────────────────────
     function startCamera() {
       if (cameraRunning) return;
       html5QrCode = new Html5Qrcode("reader");
@@ -194,6 +228,7 @@
       }
     }
 
+    // ── Scan ──────────────────────────────────────────────────────────────────
     function onScanSuccess(decodedText) {
       if (delay || decodedText === lastScanned) return;
       delay = true;
@@ -207,33 +242,24 @@
         + "&auditor="  + encodeURIComponent(auditorName)
         + "&comments=" + encodeURIComponent(comments);
 
-      // ── Because mode: no-cors we cannot read the response body ──
-      // ── So we use a second fetch with mode: cors to get the result ──
       fetch(url, { method: "GET" })
         .then(res => res.text())
         .then(response => {
           response = response.trim();
-
           if (response === "DISCONTINUED") {
-            // ✅ Show discontinued popup
             document.getElementById("popupERP").innerText = decodedText;
             document.getElementById("discontinuedOverlay").classList.add("show");
             setStatus("⚠️ Discontinued item scanned!", "red");
             beep();
-
           } else if (response === "DUPLICATE") {
             setStatus("⚠️ Already scanned: " + decodedText, "orange");
-
           } else if (response === "ERP_NOT_FOUND") {
             setStatus("❌ ERP not found in Master: " + decodedText, "red");
-
           } else {
-            // SUCCESS
             setStatus("✅ Scanned: " + decodedText + (comments ? "  💬 " + comments : ""), "green");
             beep();
             document.getElementById("comments").value = "";
           }
-
           setTimeout(() => { delay = false; lastScanned = ""; }, 1500);
         })
         .catch(err => {
@@ -242,11 +268,65 @@
         });
     }
 
-    function dismissPopup() {
+    // ── Discontinued popup ────────────────────────────────────────────────────
+    function dismissDiscontinued() {
       document.getElementById("discontinuedOverlay").classList.remove("show");
       delay = false;
       lastScanned = "";
       setStatus("📷 Camera active — point at QR/barcode", "green");
+    }
+
+    // ── Finish Audit ──────────────────────────────────────────────────────────
+    function showFinishPopup() {
+      document.getElementById("managerName").value = "";
+      document.getElementById("managerError").style.display = "none";
+      document.getElementById("finishOverlay").classList.add("show");
+    }
+
+    function cancelFinish() {
+      document.getElementById("finishOverlay").classList.remove("show");
+    }
+
+    function confirmFinish() {
+      var managerName = document.getElementById("managerName").value.trim();
+      if (!managerName) { alert("Please enter manager name."); return; }
+
+      document.getElementById("managerError").style.display = "none";
+      setStatus("⏳ Verifying manager...", "blue");
+
+      // Step 1 — verify manager
+      fetch(APPS_SCRIPT_URL + "?action=checkManager&name=" + encodeURIComponent(managerName), {
+        method: "GET"
+      })
+      .then(res => res.text())
+      .then(response => {
+        if (response.trim() === "IS_MANAGER") {
+          // Step 2 — finish audit
+          return fetch(APPS_SCRIPT_URL + "?action=finishAudit", { method: "GET" });
+        } else {
+          document.getElementById("managerError").style.display = "block";
+          setStatus("📷 Camera active — point at QR/barcode", "green");
+          throw new Error("NOT_MANAGER");
+        }
+      })
+      .then(res => res.text())
+      .then(() => {
+        document.getElementById("finishOverlay").classList.remove("show");
+        stopCamera();
+        setStatus("🏁 Audit finished! Unscanned items marked Missing.", "blue");
+        // Show login again for next auditor
+        setTimeout(() => {
+          document.getElementById("scannerUI").classList.add("hidden");
+          document.getElementById("login").classList.remove("hidden");
+          document.getElementById("auditor").value = "";
+          setStatus("Ready to scan...", "green");
+        }, 3000);
+      })
+      .catch(err => {
+        if (err.message !== "NOT_MANAGER") {
+          setStatus("❌ Network error finishing audit.", "red");
+        }
+      });
     }
 
     function setStatus(msg, color) {
