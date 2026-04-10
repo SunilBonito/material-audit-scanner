@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Material Audit Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 16px; max-width: 480px; margin: auto; }
+    h2 { margin-bottom: 4px; }
+    button {
+      padding: 12px 18px; margin: 6px 4px;
+      font-size: 16px; border-radius: 8px;
+      border: none; cursor: pointer; background: #1a73e8; color: white;
+      -webkit-appearance: none;
+    }
+    button.orange { background: #e8710a; }
+    button.green  { background: #2e7d32; }
+    button.red    { background: #c62828; }
+    input[type="text"] {
+      width: 90%; padding: 12px; font-size: 16px;
+      border-radius: 8px; border: 1px solid #ccc; margin: 6px 0;
+      -webkit-appearance: none;
+    }
+    #status {
+      font-size: 17px; font-weight: bold;
+      margin: 12px 0; padding: 10px;
+      border-radius: 8px; background: #f1f8e9; color: green;
+    }
+    #reader { width: 100%; max-width: 400px; margin-top: 12px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+  <h2>Material Audit Scanner</h2>
+
+  <div id="login">
+    <label><b>Enter Your Name:</b></label><br>
+    <input type="text" id="auditor" placeholder="Your name"><br><br>
+    <button id="btnStartAudit">Start Audit</button>
+  </div>
+
+  <div id="scannerUI" class="hidden">
+    <h3 id="welcome"></h3>
+    <div id="status">Ready to scan...</div>
+
+    <button id="btnNormal">Normal Scan</button>
+    <button id="btnDamaged" class="orange">Damaged / Add Comment</button>
+
+    <div id="commentBox" class="hidden"><br>
+      <input type="text" id="comments" placeholder="Enter issue (broken, chipped, etc.)">
+    </div><br>
+
+    <button id="startCamBtn" class="green">📷 Start Camera</button>
+    <button id="stopCamBtn" class="red hidden">⛔ Stop Camera</button>
+
+    <div id="reader"></div>
+  </div>
+
+  <script>
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxsEr-BztVSA5tpW7QH-hOVm7yPyrEyZaBLXtC8YZdDeJP1JDirQ1OEB7QlXwPS2LcU/exec";
+
+    let auditorName = "";
+    let mode = "normal";
+    let lastScanned = "";
+    let delay = false;
+    let html5QrCode = null;
+    let cameraRunning = false;
+
+    document.addEventListener("DOMContentLoaded", function () {
+      document.getElementById("btnStartAudit").addEventListener("click", startAudit);
+      document.getElementById("btnNormal").addEventListener("click", setNormalMode);
+      document.getElementById("btnDamaged").addEventListener("click", setCommentMode);
+      document.getElementById("startCamBtn").addEventListener("click", startCamera);
+      document.getElementById("stopCamBtn").addEventListener("click", stopCamera);
+    });
+
+    function startAudit() {
+      auditorName = document.getElementById("auditor").value.trim();
+      if (!auditorName) { alert("Please enter your name."); return; }
+      document.getElementById("login").classList.add("hidden");
+      document.getElementById("scannerUI").classList.remove("hidden");
+      document.getElementById("welcome").innerText = "Auditor: " + auditorName;
+    }
+
+    function startCamera() {
+      if (cameraRunning) return;
+      html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 15, qrbox: { width: 250, height: 250 } },
+        onScanSuccess,
+        () => {}
+      ).then(() => {
+        cameraRunning = true;
+        document.getElementById("startCamBtn").classList.add("hidden");
+        document.getElementById("stopCamBtn").classList.remove("hidden");
+        setStatus("📷 Camera active — point at QR/barcode", "green");
+      }).catch(err => {
+        setStatus("❌ Camera error: " + err, "red");
+      });
+    }
+
+    function stopCamera() {
+      if (html5QrCode && cameraRunning) {
+        html5QrCode.stop().then(() => {
+          cameraRunning = false;
+          document.getElementById("stopCamBtn").classList.add("hidden");
+          document.getElementById("startCamBtn").classList.remove("hidden");
+          setStatus("Camera stopped.", "gray");
+        });
+      }
+    }
+
+    function setNormalMode() {
+      mode = "normal";
+      document.getElementById("commentBox").classList.add("hidden");
+      document.getElementById("comments").value = "";
+    }
+
+    function setCommentMode() {
+      mode = "comment";
+      document.getElementById("commentBox").classList.remove("hidden");
+    }
+
+    function onScanSuccess(decodedText) {
+      if (delay || decodedText === lastScanned) return;
+      delay = true;
+      lastScanned = decodedText;
+
+      let comments = mode === "comment" ? document.getElementById("comments").value.trim() : "";
+      let status   = mode === "comment" ? "Damaged" : "Available";
+
+      setStatus("⏳ Logging: " + decodedText, "blue");
+
+      const url = APPS_SCRIPT_URL
+        + "?erp="      + encodeURIComponent(decodedText)
+        + "&auditor="  + encodeURIComponent(auditorName)
+        + "&comments=" + encodeURIComponent(comments)
+        + "&status="   + encodeURIComponent(status);
+
+      fetch(url, { method: "GET", mode: "no-cors" })
+        .then(() => {
+          setStatus("✅ Scanned: " + decodedText, "green");
+          beep();
+          document.getElementById("comments").value = "";
+          setNormalMode();
+          setTimeout(() => { delay = false; lastScanned = ""; }, 1500);
+        })
+        .catch(err => {
+          setStatus("❌ Network error: " + err, "red");
+          delay = false;
+        });
+    }
+
+    function setStatus(msg, color) {
+      const el = document.getElementById("status");
+      el.innerText = msg;
+      el.style.color = color || "green";
+    }
+
+    function beep() {
+      try {
+        new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg").play();
+      } catch(e) {}
+    }
+  </script>
+
+</body>
+</html>
