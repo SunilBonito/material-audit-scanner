@@ -5,63 +5,72 @@
   <title>Material Audit Scanner</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 16px; max-width: 480px; margin: auto; }
-    h2 { margin-bottom: 4px; }
+    body { font-family: Arial, sans-serif; padding: 16px; max-width: 480px; margin: auto; background: #f9f9f9; }
+    h2 { margin-bottom: 4px; color: #1a73e8; }
     button {
       padding: 12px 18px; margin: 6px 4px;
       font-size: 16px; border-radius: 8px;
       border: none; cursor: pointer; background: #1a73e8; color: white;
-      -webkit-appearance: none;
+      -webkit-appearance: none; width: 100%;
     }
-    button.orange { background: #e8710a; }
-    button.green  { background: #2e7d32; }
-    button.red    { background: #c62828; }
+    button.green { background: #2e7d32; }
+    button.red   { background: #c62828; }
     input[type="text"] {
-      width: 90%; padding: 12px; font-size: 16px;
+      width: 93%; padding: 12px; font-size: 16px;
       border-radius: 8px; border: 1px solid #ccc; margin: 6px 0;
       -webkit-appearance: none;
     }
     #status {
       font-size: 17px; font-weight: bold;
-      margin: 12px 0; padding: 10px;
-      border-radius: 8px; background: #f1f8e9; color: green;
+      margin: 12px 0; padding: 12px;
+      border-radius: 8px; background: #e8f5e9; color: green;
+      text-align: center;
     }
     #reader { width: 100%; max-width: 400px; margin-top: 12px; }
     .hidden { display: none; }
+    .label { font-size: 14px; color: #555; margin-top: 10px; display: block; }
+    .card {
+      background: white; border-radius: 12px;
+      padding: 16px; margin-bottom: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 <body>
 
-  <h2>Material Audit Scanner</h2>
+  <h2>📦 Material Audit Scanner</h2>
 
-  <div id="login">
-    <label><b>Enter Your Name:</b></label><br>
+  <!-- LOGIN -->
+  <div id="login" class="card">
+    <span class="label"><b>Enter Your Name:</b></span>
     <input type="text" id="auditor" placeholder="Your name"><br><br>
     <button id="btnStartAudit">Start Audit</button>
   </div>
 
+  <!-- SCANNER UI -->
   <div id="scannerUI" class="hidden">
-    <h3 id="welcome"></h3>
-    <div id="status">Ready to scan...</div>
 
-    <button id="btnNormal">Normal Scan</button>
-    <button id="btnDamaged" class="orange">Damaged / Add Comment</button>
+    <div class="card">
+      <h3 id="welcome" style="margin:0 0 8px 0;"></h3>
+      <div id="status">Ready to scan...</div>
+    </div>
 
-    <div id="commentBox" class="hidden"><br>
-      <input type="text" id="comments" placeholder="Enter issue (broken, chipped, etc.)">
-    </div><br>
+    <div class="card">
+      <span class="label"><b>Comment (optional):</b></span>
+      <input type="text" id="comments" placeholder="Add a comment for this item...">
+    </div>
 
     <button id="startCamBtn" class="green">📷 Start Camera</button>
     <button id="stopCamBtn" class="red hidden">⛔ Stop Camera</button>
 
     <div id="reader"></div>
+
   </div>
 
   <script>
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxsEr-BztVSA5tpW7QH-hOVm7yPyrEyZaBLXtC8YZdDeJP1JDirQ1OEB7QlXwPS2LcU/exec";
 
     let auditorName = "";
-    let mode = "normal";
     let lastScanned = "";
     let delay = false;
     let html5QrCode = null;
@@ -69,8 +78,6 @@
 
     document.addEventListener("DOMContentLoaded", function () {
       document.getElementById("btnStartAudit").addEventListener("click", startAudit);
-      document.getElementById("btnNormal").addEventListener("click", setNormalMode);
-      document.getElementById("btnDamaged").addEventListener("click", setCommentMode);
       document.getElementById("startCamBtn").addEventListener("click", startCamera);
       document.getElementById("stopCamBtn").addEventListener("click", stopCamera);
     });
@@ -78,9 +85,21 @@
     function startAudit() {
       auditorName = document.getElementById("auditor").value.trim();
       if (!auditorName) { alert("Please enter your name."); return; }
+
       document.getElementById("login").classList.add("hidden");
       document.getElementById("scannerUI").classList.remove("hidden");
       document.getElementById("welcome").innerText = "Auditor: " + auditorName;
+      setStatus("⏳ Setting up audit...", "blue");
+
+      // Mark all unscanned items as Missing immediately
+      const url = APPS_SCRIPT_URL + "?action=markAllMissing&auditor=" + encodeURIComponent(auditorName);
+      fetch(url, { method: "GET", mode: "no-cors" })
+        .then(() => {
+          setStatus("✅ Audit started — all items set to Missing. Scan to mark Available.", "green");
+        })
+        .catch(() => {
+          setStatus("⚠️ Could not set Missing status. Check connection.", "orange");
+        });
     }
 
     function startCamera() {
@@ -112,39 +131,25 @@
       }
     }
 
-    function setNormalMode() {
-      mode = "normal";
-      document.getElementById("commentBox").classList.add("hidden");
-      document.getElementById("comments").value = "";
-    }
-
-    function setCommentMode() {
-      mode = "comment";
-      document.getElementById("commentBox").classList.remove("hidden");
-    }
-
     function onScanSuccess(decodedText) {
       if (delay || decodedText === lastScanned) return;
       delay = true;
       lastScanned = decodedText;
 
-      let comments = mode === "comment" ? document.getElementById("comments").value.trim() : "";
-      let status   = mode === "comment" ? "Damaged" : "Available";
+      let comments = document.getElementById("comments").value.trim();
 
       setStatus("⏳ Logging: " + decodedText, "blue");
 
       const url = APPS_SCRIPT_URL
         + "?erp="      + encodeURIComponent(decodedText)
         + "&auditor="  + encodeURIComponent(auditorName)
-        + "&comments=" + encodeURIComponent(comments)
-        + "&status="   + encodeURIComponent(status);
+        + "&comments=" + encodeURIComponent(comments);
 
       fetch(url, { method: "GET", mode: "no-cors" })
         .then(() => {
-          setStatus("✅ Scanned: " + decodedText, "green");
+          setStatus("✅ Scanned: " + decodedText + (comments ? " 💬 " + comments : ""), "green");
           beep();
-          document.getElementById("comments").value = "";
-          setNormalMode();
+          document.getElementById("comments").value = ""; // clear comment after scan
           setTimeout(() => { delay = false; lastScanned = ""; }, 1500);
         })
         .catch(err => {
